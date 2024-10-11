@@ -1,0 +1,19 @@
+# trace file name
+FNAME = 'FIO_train.log'
+
+# SSD parameters
+PAGE_SIZE = 512 * 8
+PAGES_PER_BLOCK = 512
+BLOCKS_PER_SSD = 512 * 1 * 8 * 32
+GC_TRHESHOLD = 0.75
+OVER_PROVISIONING_SPACE = 0.25
+
+
+# About Workloads
+WRITE_REQUEST_COUNT = 0
+
+
+# About WA
+USER_WRITE = 0
+GC_WRITE = 0
+GARBAGE_COLLECTION_COUNT = 0
