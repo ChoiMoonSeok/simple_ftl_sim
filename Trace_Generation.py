@@ -1,16 +1,9 @@
-from abc import *
-
-import Statistics as st
-
-
-class AbstractTraceGenerator(metaClass=ABCMeta):
+class AbstractTraceGenerator:
     
-    @abstractmethod
     def __init__(self, fname):
-        pass
+        self.fname = fname
 
 
-    @abstractmethod
     def trace_iter(self):
         pass
 
@@ -24,5 +17,5 @@ class DefaultTraceGenerator(AbstractTraceGenerator):
     def trace_iter(self):
         with open(self.fname, 'r') as f:
             for l in f.readlines():
-                opcode, lba, size = map(int, l.split())
-                yield (opcode, lba, size)
+                opcode, lba, size = l.split(sep=',')
+                yield (opcode, int(lba), int(size))

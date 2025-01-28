@@ -1,4 +1,5 @@
 from collections import deque
+from math import ceil
 
 import SSD_Exceptions
 import Block
@@ -6,7 +7,7 @@ import Statistics as st
 
 class FTL:
 
-    def __init__(self, page_size, pages_per_block, blocks_per_ssd, gc_threshold, ops):
+    def __init__(self, page_size, pages_per_block, blocks_per_ssd, gc_threshold, gc_threshold_high, gc_policy, ops):
         
         self.page_size = page_size
         self.pages_per_block = pages_per_block
@@ -14,13 +15,19 @@ class FTL:
         self.capacity = page_size * pages_per_block * blocks_per_ssd
 
         self.gc_threshold = gc_threshold
+        self.gc_threshold_high = gc_threshold_high
+        self.gc_policy = gc_policy
+
         self.ops = ops
         self.free_block_count = blocks_per_ssd
 
         self.blocks = [Block.Block(pages_per_block, i) for i in range(blocks_per_ssd)]
 
         self.free_block_que = deque([i for i in range(blocks_per_ssd)])
-        self.sealed_block_que = deque([])
+        if gc_policy == 0:
+            self.sealed_block_que = deque([])
+        else:
+            self.sealed_block_que = []
 
         self.write_pointer = self.allocate_block()
 
@@ -41,12 +48,14 @@ class FTL:
         print(f'Blocks Per SSD : {self.blocks_per_ssd}')
         print(f'SSD Capacity : {self.capacity / 1024 / 1024 / 1024} Giga Bytes')
         print(f'GC Threshold : {self.gc_threshold}')
+        print(f'GC Threshold High : {self.gc_threshold_high}')
         print(f'Over Provisioning Space : {self.ops}')
         print('-' * 50)
 
         
     def process(self, opcode, lba, size):
         if opcode == 'W' or opcode == 'w':
+            st.WRITE_REQUEST_COUNT += 1
             self.write(lba, size)
         elif opcode == 'R' or opcode == 'r':
             self.read(lba, size)
@@ -69,11 +78,13 @@ class FTL:
         '''
         
         cnt = 0
-        while (self.free_block_count) < (self.blocks_per_ssd * (1 - self.gc_threshold * (1 - self.ops))):
+        if (self.free_block_count) < (self.blocks_per_ssd * (1 - 1 * (1 - self.ops) * self.gc_threshold_high)):
+
             cnt += 1
-            self.garbage_collection()
-            if cnt > (self.blocks_per_ssd * (1 - self.gc_threshold * (1 - self.ops))):
-                raise SSD_Exceptions.CapacityException
+            while (self.free_block_count) < (self.blocks_per_ssd * (1 - 1 * (1 - self.ops) * self.gc_threshold)):
+                self.garbage_collection()
+                if cnt > (self.blocks_per_ssd * (1 - self.gc_threshold * (1 - self.ops))):
+                    raise SSD_Exceptions.CapacityException
 
         # 해당 LBA가 사용된 적이 있는 경우, 할당된 lpn과 ppn을 삭제
         # If LBA has been used, remove allocated lpn and ppn
@@ -91,7 +102,7 @@ class FTL:
 
             self.lba_to_lpn.pop(lba)
 
-        page_count = round(size / self.page_size)
+        page_count = ceil(size / self.page_size)
 
         self.lba_to_lpn[lba] = [self.lpn_que.popleft() for _ in range(page_count)]
 
@@ -116,8 +127,22 @@ class FTL:
 
 
 
-    def select_victim(self):
+    def select_victim_FIFO(self):
         return self.sealed_block_que.popleft()
+    
+
+    def select_victim_greedy(self):
+        most_invalid = 0
+        most_invalid_blk = None
+        for i in range(len(self.sealed_block_que)):
+            if self.blocks[i].invalid_page_count > most_invalid:
+                most_invalid = self.blocks[i].invalid_page_count
+                most_invalid_blk = i
+                if most_invalid == st.PAGES_PER_BLOCK:
+                    break
+
+        return self.sealed_block_que.pop(most_invalid_blk)
+            
 
 
     def gc_write(self, lpn):
@@ -126,11 +151,17 @@ class FTL:
 
 
     def garbage_collection(self):
+        if self.gc_policy == 0:
+            self.FIFO()
+        elif self.gc_policy == 1:
+            self.greedy()
+        elif self.gc_policy == 2:
+            self.cost_benefit()
         
 
     
     def FIFO(self):
-        victim = self.select_victim()
+        victim = self.select_victim_FIFO()
         self.free_block_que.append(victim)
         self.free_block_count += 1
 
@@ -139,7 +170,13 @@ class FTL:
     
 
     def greedy(self):
-        pass
+        victim = self.select_victim_greedy()
+        self.free_block_que.append(victim)
+        self.free_block_count += 1
+
+        for ppn in self.blocks[victim].delete_block():
+            self.gc_write(self.ppn_to_lpn[ppn])
+        
 
 
     def cost_benefit(self):
