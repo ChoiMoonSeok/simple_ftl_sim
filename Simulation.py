@@ -1,20 +1,20 @@
+import Trace_Generation as TG
 import FTL
 import SSD_Exceptions
 import Statistics as st
 
 
 def simulation(fname, page_size, pages_per_block, blocks_per_ssd, gc_threshold, ops):
+
+    trace_generator = TG.DefaultTraceGenerator(fname)
     SSD = FTL.FTL(page_size, pages_per_block, blocks_per_ssd, gc_threshold, ops)
 
-    with open(fname, 'r') as f:
-        for line in f.readlines():
-            lba, size = map(int, line.split())
-            
-            try:
-                SSD.write(lba, size * 512)
-            except SSD_Exceptions.CapacityException as e:
-                print(e)
-                exit(1)
+    for io in trace_generator.trace_iter():
+        try:
+            SSD.process(*io)
+        except SSD_Exceptions.CapacityException as e:
+            print(e)
+            exit(1)
     
     print('Simulation Result')
     print(f'Write Requests : {st.WRITE_REQUEST_COUNT}')

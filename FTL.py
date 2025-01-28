@@ -45,6 +45,12 @@ class FTL:
         print('-' * 50)
 
         
+    def process(self, opcode, lba, size):
+        if opcode == 'W' or opcode == 'w':
+            self.write(lba, size)
+        elif opcode == 'R' or opcode == 'r':
+            self.read(lba, size)
+
 
     def allocate_block(self):
         self.free_block_count -= 1
@@ -52,7 +58,7 @@ class FTL:
         return self.free_block_que.popleft()
 
 
-    def read(self):
+    def read(self, lba, size):
         pass
 
 
@@ -120,9 +126,21 @@ class FTL:
 
 
     def garbage_collection(self):
+        
+
+    
+    def FIFO(self):
         victim = self.select_victim()
         self.free_block_que.append(victim)
         self.free_block_count += 1
 
         for ppn in self.blocks[victim].delete_block():
             self.gc_write(self.ppn_to_lpn[ppn])
+    
+
+    def greedy(self):
+        pass
+
+
+    def cost_benefit(self):
+        pass
